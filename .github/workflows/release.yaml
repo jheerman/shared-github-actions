@@ -1,0 +1,58 @@
+name: Release
+on:
+  workflow_dispatch:
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Create Release Notes
+        id: notes
+        run: |
+          current_tag=$(git tag --points-at ${{ GITHUB.SHA }} | head -1)
+          new_tag="official-release-${current_tag}"
+          if git rev-parse "refs/tags/$new_tag" >/dev/null 2>&1; then
+            echo "Tag $new_tag already exists. Canceling the job."
+            exit 1
+          fi
+
+          # look for last official-release tag
+          last_tag=$(git tag -l "official-release*" --sort=-v:refname | head -1)
+          if [ -n "$last_tag" ]; then
+            last_ref=$(git show-ref -s $last_tag)
+            logs=$(git log $last_ref..$GITHUB_SHA --pretty='- %h %s' --date=short)
+          else
+            # if the last tag is not found, check again but don't limit results to 1 item
+            last_tag=$(git tag -l "official-release*" --sort=-v:refname)
+            if [ -n "$last_tag" ]; then
+              last_ref=$(git show-ref -s $last_tag)
+              logs=$(git log $last_ref..$GITHUB_SHA --pretty='- %h %s' --date=short)
+            else
+              # if we still can't find a tag, then get all the commit history
+              logs=$(git log --pretty='- %h %s' --date=short)
+            fi
+          fi
+          echo "## What's Changed" > ../release_notes.md
+          echo "$logs" >> ../release_notes.md
+          echo "---" >> ../release_notes.md
+          echo "**Full Changelog**: https://github.com/${{ GITHUB.REPOSITORY }}/compare/$last_tag...$current_tag" >> ../release_notes.md
+          echo "NEW_TAG=$new_tag" >> $GITHUB_OUTPUT
+          echo "RELEASE_NAME=${new_tag}" >> $GITHUB_OUTPUT
+          git -c user.name="github-actions[bot]" -c user.email="github-actions-bot@jheerman.com" tag $new_tag
+          git push origin $new_tag
+        shell: bash
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NEW_TAG: ${{ steps.notes.outputs.NEW_TAG }}
+          RELEASE_NAME: ${{ steps.notes.outputs.RELEASE_NAME }}
+        run: |
+          gh release create ${{ env.NEW_TAG }} \
+          --title=${{ env.RELEASE_NAME }} \
+          --notes-file='../release_notes.md' \
+          --latest
