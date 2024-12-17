@@ -22,20 +22,20 @@ runs:
       shell: bash
       run: |
         current_tag=$(git tag --points-at ${{ GITHUB.SHA }} | head -1)
-        new_tag="official-release-${current_tag}"
+        new_tag="${current_tag}-release"
         if git rev-parse "refs/tags/$new_tag" >/dev/null 2>&1; then
           echo "Tag $new_tag already exists. Canceling the job."
           exit 1
         fi
 
-        # look for last official-release tag
-        last_tag=$(git tag -l "official-release*" --sort=-v:refname | head -1)
+        # look for last release tag
+        last_tag=$(git tag -l "*-release" --sort=-v:refname | head -1)
         if [ -n "$last_tag" ]; then
           last_ref=$(git show-ref -s $last_tag)
           logs=$(git log $last_ref..$GITHUB_SHA --pretty='- %h %s' --date=short)
         else
           # if the last tag is not found, check again but don't limit results to 1 item
-          last_tag=$(git tag -l "official-release*" --sort=-v:refname)
+          last_tag=$(git tag -l "*-release" --sort=-v:refname)
           if [ -n "$last_tag" ]; then
             last_ref=$(git show-ref -s $last_tag)
             logs=$(git log $last_ref..$GITHUB_SHA --pretty='- %h %s' --date=short)
